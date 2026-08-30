@@ -127,7 +127,7 @@
                 // 4. 단체(ENTITIES) 섹션 처리
                 const entities = xmlDoc.querySelectorAll('ENTITY');
                 entities.forEach(ent => {
-                    const entityName = getTextContent(ent, 'FIRST_REFERENCE_NAME');
+                    const entityName = getTextContent(ent, 'FIRST_NAME');
                     const country = getTextContent(ent, 'ENTITY_ADDRESS > COUNTRY');
                     const establishDate = getTextContent(ent, 'ENTITY_DATE_OF_BIRTH > DATE');
                     const dataId = getTextContent(ent, 'DATAID');

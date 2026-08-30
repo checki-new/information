@@ -128,10 +128,10 @@
                 const entities = xmlDoc.querySelectorAll('ENTITY');
                 entities.forEach(ent => {
                     const entityName = [
-                        getTextContent(ind, 'FIRST_NAME'),
-                        getTextContent(ind, 'SECOND_NAME'),
-                        getTextContent(ind, 'THIRD_NAME'),
-                        getTextContent(ind, 'FOURTH_NAME')
+                        getTextContent(ent, 'FIRST_NAME'),
+                        getTextContent(ent, 'SECOND_NAME'),
+                        getTextContent(ent, 'THIRD_NAME'),
+                        getTextContent(ent, 'FOURTH_NAME')
                     ].filter(val => val !== '');
                     const fullName = entityName.join(' ');
                     const country = getTextContent(ent, 'ENTITY_ADDRESS > COUNTRY');

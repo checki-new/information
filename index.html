@@ -3,26 +3,168 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TODO 앱</title>
-    <link rel="stylesheet" href="style.css">
+    <title>UN 제재 목록 XML -> CSV 변환기</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .file-input-group {
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #0056b3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #003d82;
+        }
+        #resultLog {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+    </style>
 </head>
 <body>
-    <div class="container">
-        <h1>TODO 앱</h1>
-        <div class="input-container">
-            <input type="text" id="todoInput" placeholder="전주원 바보...">
-            <button id="addButton">추가</button>
-        </div>
-        <div class="filter-container">
-            <button class="filter-btn active" data-filter="all">전체</button>
-            <button class="filter-btn" data-filter="active">미완료</button>
-            <button class="filter-btn" data-filter="completed">완료</button>
-        </div>
-        <ul id="todoList"></ul>
-        <div class="stats">
-            <span id="todoCount">0</span>개의 할 일
-        </div>
+
+    <h2>UN 제재 목록 XML ➔ CSV 변환기</h2>
+    <p>UN 제재 목록 XML 파일을 선택하면 엑셀에서 열 수 있는 CSV로 변환하여 다운로드합니다.</p>
+
+    <div class="file-input-group">
+        <input type="file" id="xmlFileInput" accept=".xml" />
     </div>
-    <script src="script.js"></script>
+    
+    <button onclick="processAndDownloadCsv()">CSV로 변환 및 다운로드</button>
+
+    <div id="resultLog"></div>
+
+    <script>
+        // 큰따옴표나 쉼표가 들어간 데이터를 CSV 형식에 맞게 이스케이프 처리
+        function escapeCsv(val) {
+            if (val === null || val === undefined) return '""';
+            const str = String(val).trim();
+            return `"${str.replace(/"/g, '""')}"`;
+        }
+
+        // XML 노드 내부의 텍스트 값을 안전하게 추출하는 헬퍼 함수
+        function getTextContent(parentElement, selector) {
+            const element = parentElement.querySelector(selector);
+            return element ? element.textContent.trim() : '';
+        }
+
+        async function processAndDownloadCsv() {
+            const fileInput = document.getElementById('xmlFileInput');
+            const logDiv = document.getElementById('resultLog');
+
+            if (!fileInput.files[0]) {
+                alert('XML 파일을 선택해 주세요.');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            logDiv.textContent = '⏳ 파일 읽는 중...';
+
+            try {
+                // 1. 파일 읽기
+                const xmlText = await file.text();
+
+                // 2. 브라우저 내장 DOMParser로 XML 파싱
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+
+                // 파싱 에러 체크
+                const parserError = xmlDoc.querySelector('parsererror');
+                if (parserError) {
+                    throw new Error("올바른 XML 형식이 아닙니다.");
+                }
+
+                const csvRows = [];
+
+                // 헤더 작성
+                const headers = ["Type", "Name", "Nationality/Country", "Date_Info", "Data_ID", "Reference"];
+                csvRows.push(headers.join(','));
+
+                // 3. 개인(INDIVIDUALS) 섹션 처리
+                const individuals = xmlDoc.querySelectorAll('INDIVIDUAL');
+                individuals.forEach(ind => {
+                    const nameParts = [
+                        getTextContent(ind, 'FIRST_NAME'),
+                        getTextContent(ind, 'SECOND_NAME'),
+                        getTextContent(ind, 'THIRD_NAME'),
+                        getTextContent(ind, 'FOURTH_NAME')
+                    ].filter(val => val !== '');
+
+                    const fullName = nameParts.join(' ');
+                    const nationality = getTextContent(ind, 'NATIONALITY > VALUE');
+                    const dob = getTextContent(ind, 'INDIVIDUAL_DATE_OF_BIRTH > DATE');
+                    const dataId = getTextContent(ind, 'DATAID');
+                    const reference = getTextContent(ind, 'REFERENCE_NUMBER');
+
+                    const row = [
+                        "Individual (개인)",
+                        fullName,
+                        nationality,
+                        dob,
+                        dataId,
+                        reference
+                    ];
+                    csvRows.push(row.map(escapeCsv).join(','));
+                });
+
+                // 4. 단체(ENTITIES) 섹션 처리
+                const entities = xmlDoc.querySelectorAll('ENTITY');
+                entities.forEach(ent => {
+                    const entityName = getTextContent(ent, 'FIRST_REFERENCE_NAME');
+                    const country = getTextContent(ent, 'ENTITY_ADDRESS > COUNTRY');
+                    const establishDate = getTextContent(ent, 'ENTITY_DATE_OF_BIRTH > DATE');
+                    const dataId = getTextContent(ent, 'DATAID');
+                    const reference = getTextContent(ent, 'REFERENCE_NUMBER');
+
+                    const row = [
+                        "Entity (단체)",
+                        entityName,
+                        country,
+                        establishDate,
+                        dataId,
+                        reference
+                    ];
+                    csvRows.push(row.map(escapeCsv).join(','));
+                });
+
+                // 5. UTF-8 BOM(\uFEFF)을 추가하여 엑셀 한글 깨짐 방지
+                const csvContent = '\uFEFF' + csvRows.join('\n');
+
+                // 6. 브라우저 다운로드 실행
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'UN_Sanctions_List.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                logDiv.textContent = `✅ 변환 완료!\n - 개인: ${individuals.length}건\n - 단체: ${entities.length}건\n - 총 데이터: ${individuals.length + entities.length}건`;
+
+            } catch (error) {
+                console.error(error);
+                logDiv.textContent = `❌ 오류 발생: ${error.message}`;
+            }
+        }
+    </script>
 </body>
 </html>

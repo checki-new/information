@@ -127,7 +127,13 @@
                 // 4. 단체(ENTITIES) 섹션 처리
                 const entities = xmlDoc.querySelectorAll('ENTITY');
                 entities.forEach(ent => {
-                    const entityName = getTextContent(ent, 'FIRST_NAME > VALUE');
+                    const entityName = [
+                        getTextContent(ind, 'FIRST_NAME'),
+                        getTextContent(ind, 'SECOND_NAME'),
+                        getTextContent(ind, 'THIRD_NAME'),
+                        getTextContent(ind, 'FOURTH_NAME')
+                    ].filter(val => val !== '');
+                    const fullName = entityName.join(' ');
                     const country = getTextContent(ent, 'ENTITY_ADDRESS > COUNTRY');
                     const establishDate = getTextContent(ent, 'ENTITY_DATE_OF_BIRTH > DATE');
                     const dataId = getTextContent(ent, 'DATAID');
@@ -135,7 +141,7 @@
 
                     const row = [
                         "Entity (단체)",
-                        entityName,
+                        fullName,
                         country,
                         establishDate,
                         dataId,

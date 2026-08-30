@@ -1,128 +1,28 @@
-class TodoApp {
-    constructor() {
-        this.todos = JSON.parse(localStorage.getItem('todos')) || [];
-        this.currentFilter = 'all';
-        
-        this.todoInput = document.getElementById('todoInput');
-        this.addButton = document.getElementById('addButton');
-        this.todoList = document.getElementById('todoList');
-        this.todoCount = document.getElementById('todoCount');
-        this.filterButtons = document.querySelectorAll('.filter-btn');
-        
-        this.init();
-    }
-    
-    init() {
-        this.addButton.addEventListener('click', () => this.addTodo());
-        this.todoInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.addTodo();
-            }
-        });
-        
-        this.filterButtons.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                this.setFilter(e.target.dataset.filter);
-            });
-        });
-        
-        this.render();
-    }
-    
-    addTodo() {
-        const text = this.todoInput.value.trim();
-        if (text === '') return;
-        
-        const todo = {
-            id: Date.now(),
-            text: text,
-            completed: false
-        };
-        
-        this.todos.push(todo);
-        this.todoInput.value = '';
-        this.saveTodos();
-        this.render();
-    }
-    
-    deleteTodo(id) {
-        this.todos = this.todos.filter(todo => todo.id !== id);
-        this.saveTodos();
-        this.render();
-    }
-    
-    toggleTodo(id) {
-        const todo = this.todos.find(todo => todo.id === id);
-        if (todo) {
-            todo.completed = !todo.completed;
-            this.saveTodos();
-            this.render();
-        }
-    }
-    
-    setFilter(filter) {
-        this.currentFilter = filter;
-        this.filterButtons.forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.filter === filter);
-        });
-        this.render();
-    }
-    
-    getFilteredTodos() {
-        switch (this.currentFilter) {
-            case 'active':
-                return this.todos.filter(todo => !todo.completed);
-            case 'completed':
-                return this.todos.filter(todo => todo.completed);
-            default:
-                return this.todos;
-        }
-    }
-    
-    saveTodos() {
-        localStorage.setItem('todos', JSON.stringify(this.todos));
-    }
-    
-    render() {
-        const filteredTodos = this.getFilteredTodos();
-        
-        this.todoList.innerHTML = '';
-        
-        filteredTodos.forEach(todo => {
-            const li = document.createElement('li');
-            li.className = `todo-item ${todo.completed ? 'completed' : ''}`;
-            
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.className = 'todo-checkbox';
-            checkbox.checked = todo.completed;
-            checkbox.addEventListener('change', () => this.toggleTodo(todo.id));
-            
-            const text = document.createElement('span');
-            text.className = 'todo-text';
-            text.textContent = todo.text;
-            
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'delete-btn';
-            deleteBtn.textContent = '삭제';
-            deleteBtn.addEventListener('click', () => this.deleteTodo(todo.id));
-            
-            li.appendChild(checkbox);
-            li.appendChild(text);
-            li.appendChild(deleteBtn);
-            
-            this.todoList.appendChild(li);
-        });
-        
-        this.updateCount();
-    }
-    
-    updateCount() {
-        const activeCount = this.todos.filter(todo => !todo.completed).length;
-        this.todoCount.textContent = activeCount;
-    }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    new TodoApp();
-});
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TODO 앱</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>TODO 앱</h1>
+        <div class="input-container">
+            <input type="text" id="todoInput" placeholder="새 할 일 입력...">
+            <button id="addButton">추가</button>
+        </div>
+        <div class="filter-container">
+            <button class="filter-btn active" data-filter="all">전체</button>
+            <button class="filter-btn" data-filter="active">미완료</button>
+            <button class="filter-btn" data-filter="completed">완료</button>
+        </div>
+        <ul id="todoList"></ul>
+        <div class="stats">
+            <span id="todoCount">0</span>개의 할 일
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WatchList_Search [준법추진파트]</title>
+    <!-- 유사도 계산을 위한 Fuzzball 라이브러리 (thefuzz의 JS 버전을 포함) -->
+    <script src="https://cdn.jsdelivr.net/npm/fuzzball@2.1.2/dist/fuzzball.umd.min.js"></script>
+    <!-- CSV 파싱을 위한 PapaParse 라이브러리 -->
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    
+    <style>
+        :root {
+            --bg-color: #2c3e50;
+            --card-color: #34495e;
+            --text-color: #ecf0f1;
+            --btn-color: #3498db;
+            --result-bg: #1e272e;
+            --match-color: #2ecc71;
+            --error-color: #e74c3c;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Malgun Gothic', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        header {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--btn-color);
+            margin-bottom: 10px;
+        }
+
+        .card {
+            background-color: var(--card-color);
+            padding: 20px;
+            border-radius: 6px;
+            display: grid;
+            grid-template-columns: 120px 1fr 140px;
+            gap: 12px;
+            align-items: center;
+        }
+
+        label {
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        input[type="text"], select, input[type="file"] {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            outline: none;
+            background-color: #ffffff;
+            color: #333;
+        }
+
+        .file-upload-section {
+            grid-column: span 3;
+            border: 2px dashed #7f8c8d;
+            padding: 15px;
+            border-radius: 4px;
+            background-color: rgba(0, 0, 0, 0.1);
+            font-size: 13px;
+        }
+
+        .file-status {
+            margin-top: 8px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            background-color: #7f8c8d;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        .badge.loaded { background-color: var(--match-color); }
+
+        .btn-search {
+            grid-column: 3;
+            grid-row: 2 / span 2;
+            background-color: var(--btn-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            height: 100%;
+            min-height: 80px;
+            transition: background-color 0.2s;
+        }
+
+        .btn-search:hover {
+            background-color: #2980b9;
+        }
+
+        .result-area {
+            background-color: var(--result-bg);
+            color: #d2dae2;
+            font-family: 'Consolas', monospace;
+            font-size: 14px;
+            padding: 15px;
+            border-radius: 6px;
+            height: 480px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            line-height: 1.5;
+        }
+
+        .text-header { color: var(--btn-color); font-weight: bold; font-size: 15px; }
+        .text-match { color: var(--match-color); font-weight: bold; }
+        .text-error { color: var(--error-color); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>WatchList 검색 [준법추진파트]</header>
+
+    <div class="card">
+        <!-- CSV 파일 등록 영역 (웹 특성상 필요) -->
+        <div class="file-upload-section">
+            <label>📂 WatchList CSV 파일 로드 (여러 파일 한번에 선택 가능)</label><br>
+            <input type="file" id="fileInput" multiple accept=".csv" style="margin-top: 8px; width: 100%;">
+            <div class="file-status" id="fileStatus">
+                <span class="badge" id="badge-cia">CIA_PEPS.csv</span>
+                <span class="badge" id="badge-ofac">OFAC_SDN.csv</span>
+                <span class="badge" id="badge-un">UN_Sanctions_List.csv</span>
+                <span class="badge" id="badge-fsc">금융거래대상자.csv</span>
+            </div>
+        </div>
+
+        <!-- 검색 조건 설정 -->
+        <label for="entryName">성명</label>
+        <input type="text" id="entryName" placeholder="검색할 성명 입력">
+
+        <button class="btn-search" onclick="performSearch()">조회 (SEARCH)</button>
+
+        <label for="comboThreshold">유사도(%)</label>
+        <select id="comboThreshold">
+            <option value="40">40</option>
+            <option value="50" selected>50</option>
+            <option value="60">60</option>
+            <option value="70">70</option>
+            <option value="80">80</option>
+            <option value="90">90</option>
+            <option value="100">100</option>
+        </select>
+    </div>
+
+    <!-- 결과 출력 영역 -->
+    <div class="result-area" id="textArea"></div>
+</div>
+
+<script>
+    // CSV 데이터 및 컬럼 인덱스 매핑 저장용 객체
+    const csvSources = {
+        'CIA_PEPS.csv': { name: 'CIA_peps', nameIdx: 2, data: null },
+        'OFAC_SDN.csv': { name: 'OFAC_SDN', nameIdx: 1, data: null },
+        'UN_Sanctions_List.csv': { name: 'UN_List', nameIdx: 1, data: null },
+        '금융거래대상자.csv': { name: '금융위원회', nameIdx: 0, data: null }
+    };
+
+    // CSV 파일 로드 이벤트 핸들러
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+        const files = e.target.files;
+        
+        Array.from(files).forEach(file => {
+            const fileName = file.name;
+            
+            // 등록 대상 파일인지 확인
+            if (csvSources[fileName]) {
+                Papa.parse(file, {
+                    encoding: "utf-8",
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        // Header 제거 후 데이터 저장
+                        csvSources[fileName].data = results.data.slice(1);
+                        
+                        // 바지 UI 업데이트
+                        updateBadge(fileName, true);
+                    }
+                });
+            }
+        });
+    });
+
+    function updateBadge(fileName, isLoaded) {
+        let badgeId = '';
+        if (fileName.includes('CIA')) badgeId = 'badge-cia';
+        else if (fileName.includes('OFAC')) badgeId = 'badge-ofac';
+        else if (fileName.includes('UN')) badgeId = 'badge-un';
+        else if (fileName.includes('금융')) badgeId = 'badge-fsc';
+
+        if (badgeId) {
+            const el = document.getElementById(badgeId);
+            if (isLoaded) {
+                el.classList.add('loaded');
+                el.innerText = `✓ ${fileName}`;
+            }
+        }
+    }
+
+    // 화면에 텍스트를 태그 스타일별로 추가하는 함수
+    function appendText(text, className = '') {
+        const textArea = document.getElementById('textArea');
+        if (className) {
+            const span = document.createElement('span');
+            span.className = className;
+            span.textContent = text;
+            textArea.appendChild(span);
+        } else {
+            textArea.appendChild(document.createTextNode(text));
+        }
+    }
+
+    // CSV 파일 내 검색 수행
+    function searchInCsv(sourceKey, searchName, threshold) {
+        const source = csvSources[sourceKey];
+        
+        appendText(`🔍 ${source.name} : '${searchName}' 검색 결과 (유사도 ${threshold}%↑)\n`, 'text-header');
+        appendText("—".repeat(50) + "\n");
+
+        if (!source.data) {
+            appendText(`⚠️ 파일이 로드되지 않았습니다: ${sourceKey}\n\n`, 'text-error');
+            return;
+        }
+
+        let found = false;
+
+        source.data.forEach(row => {
+            if (row.length <= source.nameIdx) return;
+
+            const targetName = String(row[source.nameIdx]);
+            
+            // Python thefuzz.fuzz.token_set_ratio 와 동일한 알고리즘 수행
+            const similarity = fuzzball.token_set_ratio(searchName, targetName);
+
+            if (similarity >= threshold) {
+                appendText(`✅ [${similarity}%] ${targetName}\n`, 'text-match');
+                const info = `   ${source.name}: ${row.slice(0, 10).join(', ')}\n\n`;
+                appendText(info);
+                found = true;
+            }
+        });
+
+        if (!found) {
+            appendText("❌ 일치하는 정보가 없습니다.\n", 'text-error');
+        }
+
+        appendText("\n");
+    }
+
+    // 메인 검색 함수
+    function performSearch() {
+        const searchName = document.getElementById('entryName').value.trim();
+        const threshold = parseInt(document.getElementById('comboThreshold').value, 10) || 70;
+
+        if (!searchName) {
+            alert("검색할 성명을 입력하세요.");
+            return;
+        }
+
+        const textArea = document.getElementById('textArea');
+        textArea.innerHTML = ''; // 기존 결과 초기화
+
+        // 각 파일에 대한 순차적 검색
+        Object.keys(csvSources).forEach(key => {
+            searchInCsv(key, searchName, threshold);
+        });
+
+        // 스크롤 상단 이동
+        textArea.scrollTop = 0;
+    }
+</script>
+
+</body>
+</html>
